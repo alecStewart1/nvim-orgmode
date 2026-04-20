@@ -5,6 +5,89 @@ local Calendar = require('orgmode.objects.calendar')
 local Promise = require('orgmode.utils.promise')
 local Input = require('orgmode.ui.input')
 
+---@description Make sure to deduplicate the tags grabbed by `get_target_tags` and `get_all_tags`
+---@param tags string[]
+---@return string[]
+local function uniq_tags(tags)
+  local unique = {}
+  for _, tag in ipairs(tags or {}) do
+    if tag ~= '' then
+      unique[tag] = true
+    end
+  end
+  local list = vim.tbl_keys(unique)
+  table.sort(list)
+  return list
+end
+
+---@description For `%^g` expansion in capture templates: gets all tags in the targeted file.
+---@param template? table
+---@return string[]
+local function get_target_tags(template)
+  local org = require('orgmode')
+  if not org.files or not template or template.target == '' then
+    return {}
+  end
+
+  local ok, file = pcall(function()
+    return org.files:get(template:get_target())
+  end)
+
+  if not ok or not file then
+    return {}
+  end
+
+  local tags = {}
+  for _, tag in ipairs(file:get_filetags()) do
+    table.insert(tags, tag)
+  end
+  for _, headline in ipairs(file:get_headlines()) do
+    local own_tags = headline:get_own_tags()
+    for _, tag in ipairs(own_tags) do
+      table.insert(tags, tag)
+    end
+  end
+
+  return uniq_tags(tags)
+end
+
+---@description For `%^G` expansion in capture templates: gets all tags in all agenda files.
+---@return string[]
+local function get_all_tags()
+  local org = require('orgmode')
+  if not org.files then
+    return {}
+  end
+  return org.files:get_tags()
+end
+
+---@param single boolean
+---@param tags_source string[]
+---@return OrgPromise<string>
+local function prompt_tags(single, tags_source)
+  local completion = function(arg_lead)
+    return vim.tbl_filter(function(tag)
+      return tag:match('^' .. vim.pesc(arg_lead))
+    end, tags_source)
+  end
+  local prompt = single and 'Tag: ' or 'Tags: '
+  return Input.open(prompt, '', completion):next(function(input)
+    if input == nil then
+      return nil
+    end
+    if input == '' then
+      return ''
+    end
+
+    local tags = utils.parse_tags_string(input)
+    if single then
+      return tags[1] and utils.tags_to_string({ tags[1] }) or ''
+    end
+
+    return utils.tags_to_string(tags)
+  end)
+end
+
 local expansions = {
   ['%%f'] = function()
     return vim.fn.expand('%')
@@ -72,6 +155,12 @@ local expansions = {
     return Calendar.new({ date = Date.now(), title = title }):open():next(function(date)
       return date and date:to_wrapped_string(false) or nil
     end)
+  end,
+  ['%%%^g'] = function(_, template)
+    return prompt_tags(true, get_target_tags(template))
+  end,
+  ['%%%^G'] = function()
+    return prompt_tags(false, get_all_tags())
   end,
   ['%%a'] = function()
     return string.format('[[file:%s::%s]]', utils.current_file_path(), vim.api.nvim_win_get_cursor(0)[1])
