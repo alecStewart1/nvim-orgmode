@@ -24,13 +24,13 @@ end
 ---@param template? table
 ---@return string[]
 local function get_target_tags(template)
-  local org = require('orgmode')
-  if not org.files or not template or template.target == '' then
+  local files = template and template.files
+  if not files or not template or template.target == '' then
     return {}
   end
 
   local ok, file = pcall(function()
-    return org.files:get(template:get_target())
+    return files:get(template:get_target())
   end)
 
   if not ok or not file then
@@ -52,13 +52,14 @@ local function get_target_tags(template)
 end
 
 ---@description For `%^G` expansion in capture templates: gets all tags in all agenda files.
+---@param template? table
 ---@return string[]
-local function get_all_tags()
-  local org = require('orgmode')
-  if not org.files then
+local function get_all_tags(template)
+  local files = template and template.files
+  if not files then
     return {}
   end
-  return org.files:get_tags()
+  return files:get_tags()
 end
 
 ---@param single boolean
@@ -159,8 +160,8 @@ local expansions = {
   ['%%%^g'] = function(_, template)
     return prompt_tags(true, get_target_tags(template))
   end,
-  ['%%%^G'] = function()
-    return prompt_tags(false, get_all_tags())
+  ['%%%^G'] = function(_, template)
+    return prompt_tags(false, get_all_tags(template))
   end,
   ['%%a'] = function()
     return string.format('[[file:%s::%s]]', utils.current_file_path(), vim.api.nvim_win_get_cursor(0)[1])
@@ -179,6 +180,7 @@ local expansions = {
 ---@field whole_file? boolean
 
 ---@class OrgCaptureTemplate:OrgCaptureTemplateOpts
+---@field files? OrgFiles
 ---@field private _compile_hooks? (fun(content:string, content_type: 'target' | 'content'):string | nil)[]
 local Template = {}
 
