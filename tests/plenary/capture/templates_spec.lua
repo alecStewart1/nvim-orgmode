@@ -134,9 +134,8 @@ describe('Capture template', function()
       assert.are.same({ '* TODO ' }, template:compile():wait())
     end)
   end)
-
   it('should complete %^g from target file tags only', function()
-    local files = helpers.create_agenda_files({
+    local fixtures, org_files = helpers.create_agenda_files({
       {
         filename = 'target.org',
         content = {
@@ -158,14 +157,15 @@ describe('Capture template', function()
     end, function()
       local template = Template:new({
         template = '* TODO %^g',
-        target = files['target.org'],
+        target = fixtures['target.org'],
       })
+      template.files = org_files
       assert.are.same({ '* TODO :target_headline:' }, template:compile():wait())
     end)
   end)
 
   it('should complete %^G from all loaded agenda file tags', function()
-    helpers.create_agenda_files({
+    local _, org_files = helpers.create_agenda_files({
       {
         filename = 'target.org',
         content = {
@@ -188,6 +188,7 @@ describe('Capture template', function()
       local template = Template:new({
         template = '* TODO %^G',
       })
+      template.files = org_files
       assert.are.same({ '* TODO :target_headline:other_headline:' }, template:compile():wait())
     end)
   end)

@@ -60,7 +60,7 @@ end
 
 ---@param fixtures {filename: string, content: string[] }[]
 ---@param config? table
----@return table
+---@return table, OrgFiles
 function M.create_agenda_files(fixtures, config)
   -- NOTE: content is only 1 line for 1 file
   local temp_fname = vim.fn.tempname()
@@ -85,7 +85,7 @@ function M.create_agenda_files(fixtures, config)
   }, config or {})
   local org = orgmode.setup(cfg)
   org:init()
-  return files
+  return files, org.files
 end
 
 return M
