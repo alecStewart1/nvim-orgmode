@@ -5,21 +5,6 @@ local Calendar = require('orgmode.objects.calendar')
 local Promise = require('orgmode.utils.promise')
 local Input = require('orgmode.ui.input')
 
----@description Make sure to deduplicate the tags grabbed by `get_target_tags` and `get_all_tags`
----@param tags string[]
----@return string[]
-local function uniq_tags(tags)
-  local unique = {}
-  for _, tag in ipairs(tags or {}) do
-    if tag ~= '' then
-      unique[tag] = true
-    end
-  end
-  local list = vim.tbl_keys(unique)
-  table.sort(list)
-  return list
-end
-
 ---@description For `%^g` expansion in capture templates: gets all tags in the targeted file.
 ---@param template? table
 ---@return string[]
@@ -37,18 +22,7 @@ local function get_target_tags(template)
     return {}
   end
 
-  local tags = {}
-  for _, tag in ipairs(file:get_filetags()) do
-    table.insert(tags, tag)
-  end
-  for _, headline in ipairs(file:get_headlines()) do
-    local own_tags = headline:get_own_tags()
-    for _, tag in ipairs(own_tags) do
-      table.insert(tags, tag)
-    end
-  end
-
-  return uniq_tags(tags)
+  return file:get_tags()
 end
 
 ---@description For `%^G` expansion in capture templates: gets all tags in all agenda files.
@@ -62,17 +36,13 @@ local function get_all_tags(template)
   return files:get_tags()
 end
 
----@param single boolean
 ---@param tags_source string[]
 ---@return OrgPromise<string>
-local function prompt_tags(single, tags_source)
+local function prompt_tags(tags_source)
   local completion = function(arg_lead)
-    return vim.tbl_filter(function(tag)
-      return tag:match('^' .. vim.pesc(arg_lead))
-    end, tags_source)
+    return utils.prompt_autocomplete(arg_lead, tags_source, { ':' })
   end
-  local prompt = single and 'Tag: ' or 'Tags: '
-  return Input.open(prompt, '', completion):next(function(input)
+  return Input.open('Tags: ', '', completion):next(function(input)
     if input == nil then
       return nil
     end
@@ -81,10 +51,6 @@ local function prompt_tags(single, tags_source)
     end
 
     local tags = utils.parse_tags_string(input)
-    if single then
-      return tags[1] and utils.tags_to_string({ tags[1] }) or ''
-    end
-
     return utils.tags_to_string(tags)
   end)
 end
@@ -158,10 +124,10 @@ local expansions = {
     end)
   end,
   ['%%%^g'] = function(_, template)
-    return prompt_tags(true, get_target_tags(template))
+    return prompt_tags(get_target_tags(template))
   end,
   ['%%%^G'] = function(_, template)
-    return prompt_tags(false, get_all_tags(template))
+    return prompt_tags(get_all_tags(template))
   end,
   ['%%a'] = function()
     return string.format('[[file:%s::%s]]', utils.current_file_path(), vim.api.nvim_win_get_cursor(0)[1])
@@ -456,7 +422,6 @@ function Template:_compile_prompts(content)
 
     -- Check if this is a tag prompt (ends with g or G)
     local is_tag_prompt = exp:sub(-1, -1) == 'g' or exp:sub(-1, -1) == 'G'
-    local is_single_tag = is_tag_prompt and exp:sub(-1, -1) == 'g'
 
     local original_exp = exp
     -- If it's a tag prompt, remove the g/G from the expression for replacement
@@ -469,7 +434,6 @@ function Template:_compile_prompts(content)
       exp = exp,
       original_exp = original_exp, -- Keep the original (with g/G) for replacement
       is_tag_prompt = is_tag_prompt,
-      is_single_tag = is_single_tag,
     }
 
     if #parts > 2 then
@@ -501,12 +465,7 @@ function Template:_compile_prompts(content)
 
         -- Handle tag prompts specially - format with colons
         if prepared_input.is_tag_prompt and response and response ~= '' then
-          local tags = utils.parse_tags_string(response)
-          if prepared_input.is_single_tag then
-            response = tags[1] and utils.tags_to_string({ tags[1] }) or ''
-          else
-            response = utils.tags_to_string(tags)
-          end
+          response = utils.tags_to_string(utils.parse_tags_string(response))
         end
 
         -- For tag prompts, we need to search for the original expression (with g/G)

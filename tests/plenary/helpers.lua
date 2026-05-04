@@ -1,5 +1,3 @@
-local orgmode = require('orgmode')
-
 local M = {}
 
 ---Temporarily change a variable.
@@ -28,6 +26,7 @@ end
 
 ---@param path string
 function M.load_file(path)
+  local orgmode = require('orgmode')
   vim.cmd.edit(vim.fn.fnameescape(path))
   return orgmode.files:get(path)
 end
@@ -47,6 +46,7 @@ end
 ---@param config? table
 ---@return OrgFile
 function M.create_agenda_file(lines, config)
+  local orgmode = require('orgmode')
   local fname = vim.fn.tempname() .. '.org'
   vim.fn.writefile(lines or {}, fname)
 
@@ -62,6 +62,7 @@ end
 ---@param config? table
 ---@return table, OrgFiles
 function M.create_agenda_files(fixtures, config)
+  local orgmode = require('orgmode')
   -- NOTE: content is only 1 line for 1 file
   local temp_fname = vim.fn.tempname()
   local temp_dir = vim.fn.fnamemodify(temp_fname, ':p:h')
